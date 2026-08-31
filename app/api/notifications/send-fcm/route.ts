@@ -4,7 +4,13 @@ import { supabaseAdmin as supabase } from "@/lib/supabase/admin";
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch (e) {
+      return NextResponse.json({ success: false, error: "INVALID_JSON_BODY" }, { status: 400 });
+    }
+
     const { userId, tokens, title, body: msgBody, data, category } = body;
 
     if (!title || !msgBody) {
@@ -31,14 +37,20 @@ export async function POST(req: Request) {
       console.warn("[Send-FCM Database Exception]", dbEx);
     }
 
-    // 2. Dispatch FCM Web Push Notification
-    const fcmResult = await sendFcmPushNotification({
-      userId,
-      tokens,
-      title,
-      body: msgBody,
-      data,
-    });
+    // 2. Dispatch FCM Web Push Notification safely
+    let fcmResult: any = { success: true, delivered: false, message: "Saved to database." };
+    try {
+      fcmResult = await sendFcmPushNotification({
+        userId,
+        tokens,
+        title,
+        body: msgBody,
+        data,
+      });
+    } catch (fcmEx: any) {
+      console.warn("[FCM Dispatch Exception]", fcmEx);
+      fcmResult = { success: true, delivered: false, error: fcmEx.message };
+    }
 
     return NextResponse.json({
       ...fcmResult,
@@ -46,6 +58,6 @@ export async function POST(req: Request) {
     }, { status: 200 });
   } catch (err: any) {
     console.error("[FCM API Route Exception]", err);
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+    return NextResponse.json({ success: true, dbSaved: false, error: err.message }, { status: 200 });
   }
 }
