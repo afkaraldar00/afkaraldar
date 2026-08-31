@@ -16,7 +16,13 @@ import {
   ArrowLeft,
   Search,
   Check,
-  RefreshCw
+  RefreshCw,
+  Send,
+  Users,
+  User,
+  Radio,
+  ExternalLink,
+  Layers
 } from "lucide-react";
 import { formatCurrency } from "@/lib/dictionary";
 import { useSystemHealth } from "@/lib/hooks/useSystemHealth";
@@ -73,6 +79,17 @@ export default function AdminNotificationsPage() {
   const [activeFilter, setActiveFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const systemHealth = useSystemHealth();
+
+  // FCM Dispatch Modal State
+  const [showDispatchModal, setShowDispatchModal] = useState(false);
+  const [pushTarget, setPushTarget] = useState<"ALL" | "USER">("ALL");
+  const [targetUserId, setTargetUserId] = useState("");
+  const [pushTitle, setPushTitle] = useState("");
+  const [pushBody, setPushBody] = useState("");
+  const [pushActionUrl, setPushActionUrl] = useState("/customize/birthday");
+  const [pushCategory, setPushCategory] = useState("ORDER");
+  const [isSendingPush, setIsSendingPush] = useState(false);
+  const [pushFeedback, setPushFeedback] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
   useEffect(() => {
     async function loadDbNotifications() {
@@ -154,6 +171,69 @@ export default function AdminNotificationsPage() {
     }
   };
 
+  const handleSendPushBroadcast = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pushTitle || !pushBody) {
+      setPushFeedback({ type: "error", msg: "Please fill in title and message body." });
+      return;
+    }
+
+    setIsSendingPush(true);
+    setPushFeedback(null);
+
+    try {
+      // 1. Dispatch Web Push via FCM API
+      const res = await fetch("/api/notifications/send-fcm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: pushTarget === "USER" ? targetUserId : "admin",
+          title: pushTitle,
+          body: pushBody,
+          data: {
+            actionUrl: pushActionUrl,
+            category: pushCategory,
+          },
+        }),
+      });
+
+      const data = await res.json();
+
+      // 2. Insert notification log into database
+      await supabase.from("Notification").insert({
+        userId: pushTarget === "USER" ? targetUserId : null,
+        title: pushTitle,
+        body: pushBody,
+        type: pushCategory,
+      });
+
+      if (data.success) {
+        setPushFeedback({
+          type: "success",
+          msg: `Notification sent successfully! ${data.successCount ? `Delivered to ${data.successCount} active tokens.` : ""}`,
+        });
+        setPushTitle("");
+        setPushBody("");
+        setTimeout(() => setShowDispatchModal(false), 2500);
+      } else {
+        setPushFeedback({
+          type: "error",
+          msg: data.error || data.message || "Failed to dispatch FCM push notification.",
+        });
+      }
+    } catch (err: any) {
+      setPushFeedback({ type: "error", msg: err.message || "Error sending push notification." });
+    } finally {
+      setIsSendingPush(false);
+    }
+  };
+
+  const applyTemplate = (title: string, body: string, actionUrl: string) => {
+    setPushTitle(title);
+    setPushBody(body);
+    setPushActionUrl(actionUrl);
+  };
+
   const filteredNotifications = notifications.filter((n) => {
     const matchesSearch =
       n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -218,12 +298,20 @@ export default function AdminNotificationsPage() {
           </p>
         </div>
 
-        {/* Quick Action Controls */}
-        <div className="flex items-center gap-3">
+        {/* Action Controls */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={() => setShowDispatchModal(true)}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#AD7D39] to-[#7D5121] text-white text-xs font-bold shadow-md hover:opacity-95 transition-all"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>Send Push Message</span>
+          </button>
+
           {unreadCount > 0 && (
             <button
               onClick={markAllAsRead}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-[#AD7D39]/30 text-xs font-bold text-[#7D5121] hover:bg-[#FBF8F3] transition-all shadow-sm"
+              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white border border-[#AD7D39]/30 text-xs font-bold text-[#7D5121] hover:bg-[#FBF8F3] transition-all shadow-sm"
             >
               <Check className="w-3.5 h-3.5" />
               <span>Mark All Read</span>
@@ -231,7 +319,7 @@ export default function AdminNotificationsPage() {
           )}
           <button
             onClick={clearAll}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700 hover:bg-rose-100 transition-all shadow-sm"
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700 hover:bg-rose-100 transition-all shadow-sm"
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span>Clear Log</span>
@@ -239,7 +327,7 @@ export default function AdminNotificationsPage() {
         </div>
       </div>
 
-      {/* FCM Web Push Live Status Card */}
+      {/* FCM Web Push Live Status Banner */}
       <div className="bg-[#191611] text-white p-5 rounded-2xl border border-[#AD7D39]/40 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl bg-cyan-950/80 text-cyan-400 border border-cyan-800/60 flex items-center justify-center font-bold">
@@ -247,24 +335,34 @@ export default function AdminNotificationsPage() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-serif font-bold text-base text-white">Firebase FCM Web Push Status</h3>
-              <span className="text-[9px] uppercase font-bold px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800/60">
-                VAPID Active
+              <h3 className="font-serif font-bold text-base text-white">Firebase FCM Web Push Engine</h3>
+              <span className="text-[9px] uppercase font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60">
+                Live Active
               </span>
             </div>
             <p className="text-xs text-[#8A8378] mt-0.5 font-mono text-[11px]">
-              VAPID Key: BEi6aAsuk9ccn4uJ_M8rWotgufFBanaP8QVCoa5H5PXjlrzJqWMrC1L1ayKxka2NdlvKcC04vBwfuMUnEgF7dKc
+              VAPID: BEi6aAsuk9ccn4uJ_M8rWotgufFBanaP8QVCoa5H5PXjlrzJqWMrC1L...
             </p>
           </div>
         </div>
 
-        <button
-          onClick={systemHealth.requestFcmPermission}
-          className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#AD7D39] to-[#7D5121] text-white text-xs font-bold shadow hover:opacity-90 transition-all flex items-center gap-2 w-fit"
-        >
-          <Sparkles className="w-3.5 h-3.5" />
-          <span>Test FCM Push Alert</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowDispatchModal(true)}
+            className="px-4 py-2 rounded-xl bg-cyan-950/80 border border-cyan-700/60 text-cyan-300 text-xs font-bold hover:bg-cyan-900/60 transition-all flex items-center gap-2"
+          >
+            <Radio className="w-3.5 h-3.5 animate-ping" />
+            <span>Broadcast FCM Alert</span>
+          </button>
+
+          <button
+            onClick={systemHealth.requestFcmPermission}
+            className="px-4 py-2 rounded-xl bg-[#AD7D39]/20 border border-[#AD7D39]/40 text-[#E0C097] text-xs font-bold hover:bg-[#AD7D39]/30 transition-all flex items-center gap-2"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Enable My Device</span>
+          </button>
+        </div>
       </div>
 
       {/* Filters & Search Toolbar */}
@@ -398,6 +496,200 @@ export default function AdminNotificationsPage() {
           })
         )}
       </div>
+
+      {/* FCM Push Notification Dispatch Modal */}
+      {showDispatchModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 md:p-8 space-y-6 border border-[#AD7D39]/30 shadow-2xl animate-in fade-in zoom-in-95">
+            
+            <div className="flex items-center justify-between border-b border-[#AD7D39]/20 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-[#AD7D39]/10 text-[#AD7D39] border border-[#AD7D39]/20">
+                  <Send className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="font-serif font-bold text-xl text-[#191611]">Dispatch FCM Push Alert</h2>
+                  <p className="text-xs text-[#8A8378]">Send a live Web Push notification to client browsers & devices.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowDispatchModal(false)}
+                className="text-[#8A8378] hover:text-[#191611] font-bold text-lg p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSendPushBroadcast} className="space-y-4">
+              
+              {/* Target Selector */}
+              <div>
+                <label className="block text-xs font-bold text-[#625D55] uppercase tracking-wider mb-2">
+                  Target Audience
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPushTarget("ALL")}
+                    className={`flex items-center justify-center gap-2 p-3 rounded-xl border text-xs font-bold transition-all ${
+                      pushTarget === "ALL"
+                        ? "bg-[#AD7D39] text-white border-[#AD7D39] shadow-sm"
+                        : "bg-[#FBF8F3] text-[#625D55] border-[#AD7D39]/20 hover:bg-[#F6F0E7]"
+                    }`}
+                  >
+                    <Users className="w-4 h-4" />
+                    <span>All Subscribers</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPushTarget("USER")}
+                    className={`flex items-center justify-center gap-2 p-3 rounded-xl border text-xs font-bold transition-all ${
+                      pushTarget === "USER"
+                        ? "bg-[#AD7D39] text-white border-[#AD7D39] shadow-sm"
+                        : "bg-[#FBF8F3] text-[#625D55] border-[#AD7D39]/20 hover:bg-[#F6F0E7]"
+                    }`}
+                  >
+                    <User className="w-4 h-4" />
+                    <span>Specific User / Customer</span>
+                  </button>
+                </div>
+              </div>
+
+              {pushTarget === "USER" && (
+                <div>
+                  <label className="block text-xs font-bold text-[#625D55] uppercase tracking-wider mb-1">
+                    Customer ID or Email
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. customer_id_123 or user@example.com"
+                    value={targetUserId}
+                    onChange={(e) => setTargetUserId(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl text-xs bg-[#FBF8F3] border border-[#AD7D39]/30 focus:outline-none focus:border-[#AD7D39]"
+                  />
+                </div>
+              )}
+
+              {/* Quick Template Selector */}
+              <div>
+                <label className="block text-xs font-bold text-[#625D55] uppercase tracking-wider mb-1">
+                  Quick Push Templates
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => applyTemplate("🎉 Special Weekend Offer", "Enjoy 15% off customized luxury gift boxes this weekend across Dubai & UAE!", "/customize/birthday")}
+                    className="text-[11px] font-bold px-3 py-1 rounded-lg bg-[#F6F0E7] text-[#7D5121] border border-[#AD7D39]/20 hover:bg-[#AD7D39] hover:text-white transition-all"
+                  >
+                    🎁 Weekend Discount
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyTemplate("🚚 Order Shipped!", "Your bespoke gift box has been dispatched for delivery across Dubai & UAE.", "/track")}
+                    className="text-[11px] font-bold px-3 py-1 rounded-lg bg-[#F6F0E7] text-[#7D5121] border border-[#AD7D39]/20 hover:bg-[#AD7D39] hover:text-white transition-all"
+                  >
+                    🚚 Order Shipped
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyTemplate("💬 VIP Support Reply", "Our gifting advisor replied to your support ticket.", "/support")}
+                    className="text-[11px] font-bold px-3 py-1 rounded-lg bg-[#F6F0E7] text-[#7D5121] border border-[#AD7D39]/20 hover:bg-[#AD7D39] hover:text-white transition-all"
+                  >
+                    💬 Support Reply
+                  </button>
+                </div>
+              </div>
+
+              {/* Title & Body */}
+              <div>
+                <label className="block text-xs font-bold text-[#625D55] uppercase tracking-wider mb-1">
+                  Push Notification Title
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 🎁 Order Status Updated!"
+                  value={pushTitle}
+                  onChange={(e) => setPushTitle(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl text-xs bg-[#FBF8F3] border border-[#AD7D39]/30 focus:outline-none focus:border-[#AD7D39]"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#625D55] uppercase tracking-wider mb-1">
+                  Message Body
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="e.g. Your customized box design has been approved and is being prepared for delivery."
+                  value={pushBody}
+                  onChange={(e) => setPushBody(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl text-xs bg-[#FBF8F3] border border-[#AD7D39]/30 focus:outline-none focus:border-[#AD7D39]"
+                  required
+                />
+              </div>
+
+              {/* Action URL */}
+              <div>
+                <label className="block text-xs font-bold text-[#625D55] uppercase tracking-wider mb-1">
+                  Click Target Action Link
+                </label>
+                <input
+                  type="text"
+                  placeholder="/customize/birthday or /track"
+                  value={pushActionUrl}
+                  onChange={(e) => setPushActionUrl(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl text-xs bg-[#FBF8F3] border border-[#AD7D39]/30 focus:outline-none focus:border-[#AD7D39]"
+                />
+              </div>
+
+              {/* Feedback Message */}
+              {pushFeedback && (
+                <div
+                  className={`p-3 rounded-xl text-xs font-bold ${
+                    pushFeedback.type === "success"
+                      ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                      : "bg-rose-50 text-rose-800 border border-rose-200"
+                  }`}
+                >
+                  {pushFeedback.msg}
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#AD7D39]/20">
+                <button
+                  type="button"
+                  onClick={() => setShowDispatchModal(false)}
+                  className="px-4 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold hover:bg-gray-200 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSendingPush}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#AD7D39] to-[#7D5121] text-white text-xs font-bold hover:opacity-95 transition-all shadow-md flex items-center gap-2 disabled:opacity-50"
+                >
+                  {isSendingPush ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Sending Push...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Dispatch Push Now</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

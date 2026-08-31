@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin as supabase } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email/resend";
 import { sendWhatsAppText } from "@/lib/whatsapp/client";
+import { sendFcmPushNotification } from "@/lib/firebase/admin";
 
 export async function POST(request: Request) {
   try {
@@ -64,7 +65,22 @@ export async function POST(request: Request) {
 
     // 6. Trigger notifications depending on update type
     if (status && status !== order.status) {
-      // A. Awaiting Payment Notification (Checkout activated)
+      const formattedStatus = status.replace("_", " ");
+
+      // A. Dispatch FCM Browser Push Notification to Customer
+      if (order.customerId) {
+        sendFcmPushNotification({
+          userId: order.customerId,
+          title: `📦 Order #${id} Updated: ${formattedStatus}`,
+          body: `Dear ${customerName}, your gift box order #${id} status is now ${formattedStatus}.`,
+          data: {
+            orderId: id,
+            click_action: `/track`,
+          },
+        }).catch(e => console.error("FCM Push Dispatch Error:", e));
+      }
+
+      // B. Awaiting Payment Notification (Checkout activated)
       if (status === "AWAITING_PAYMENT") {
         const checkoutUrl = `${new URL(request.url).origin.replace(/\/api\/admin.*/, "")}/pay/${order.checkoutSlug}`;
         
@@ -95,18 +111,18 @@ export async function POST(request: Request) {
           await sendWhatsAppText({ to: customerPhone, body: bodyText }).catch(e => console.error("WhatsApp failed:", e));
         }
       } 
-      // B. General Status Update Notification (Preparing, Shipped, Delivered, etc.)
+      // C. General Status Update Notification (Preparing, Shipped, Delivered, etc.)
       else {
         // Email
         if (customerEmail) {
           await sendEmail({
             to: customerEmail,
-            subject: `📦 Order #${id} Status Update: ${status.replace("_", " ")} — Afkar AlDar`,
+            subject: `📦 Order #${id} Status Update: ${formattedStatus} — Afkar AlDar`,
             html: `
               <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #AD7D39; border-radius: 12px; background: #FFF;">
                 <h2 style="color: #191611; font-family: serif; border-bottom: 2px solid #AD7D39; padding-bottom: 10px;">Order Status Update</h2>
                 <p>Dear ${customerName},</p>
-                <p>We are pleased to inform you that your bespoke gift box order <strong>#${id}</strong> has transitioned to status: <strong>${status.replace("_", " ")}</strong>.</p>
+                <p>We are pleased to inform you that your bespoke gift box order <strong>#${id}</strong> has transitioned to status: <strong>${formattedStatus}</strong>.</p>
                 <p>Our gifting specialists are handling every detail of your request with care.</p>
               </div>
             `
@@ -115,7 +131,7 @@ export async function POST(request: Request) {
 
         // WhatsApp
         if (customerPhone) {
-          const bodyText = `Hello ${customerName},\n\nYour bespoke gift box order #${id} status has been updated to: ${status.replace("_", " ")}.\n\nThank you for choosing Afkar AlDar!`;
+          const bodyText = `Hello ${customerName},\n\nYour bespoke gift box order #${id} status has been updated to: ${formattedStatus}.\n\nThank you for choosing Afkar AlDar!`;
           await sendWhatsAppText({ to: customerPhone, body: bodyText }).catch(e => console.error("WhatsApp failed:", e));
         }
       }
