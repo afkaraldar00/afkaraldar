@@ -178,6 +178,25 @@ export async function POST(request: Request) {
         console.warn("[WhatsApp Notification Warning]", waErr);
       });
 
+      // 8. Send FCM Push Notifications to Customer & Admin
+      try {
+        const { sendFcmPushNotification } = await import("@/lib/firebase/admin");
+        await sendFcmPushNotification({
+          userId: customer.id,
+          title: `Curation Request Received #${orderId}`,
+          body: `Your custom gift box request for ${occasionSlug || "birthday"} has been received.`,
+          data: { orderId, actionUrl: "/track" },
+        });
+        await sendFcmPushNotification({
+          userId: "admin",
+          title: `🎁 New Order Request #${orderId}`,
+          body: `New ${occasionSlug || "birthday"} gift box request from ${deliveryInfo.customerName} (${deliveryInfo.emirate || "Dubai"}).`,
+          data: { orderId, actionUrl: "/admin/orders" },
+        });
+      } catch (fcmErr) {
+        console.warn("[FCM Push Notification Warning]", fcmErr);
+      }
+
       newOrder = createdOrder;
     } catch (dbErr: any) {
       console.error("[Database insertion failed]", dbErr);
