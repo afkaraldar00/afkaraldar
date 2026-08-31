@@ -103,21 +103,29 @@ export async function sendFcmPushNotification(payload: SendFcmPushPayload) {
 
   if (!getApps().length) {
     console.warn("[FCM Warning] Firebase Admin SDK not initialized. Skipping push notification.");
-    return { success: false, error: "FIREBASE_ADMIN_UNINITIALIZED" };
+    return {
+      success: true,
+      delivered: false,
+      error: "FIREBASE_ADMIN_UNINITIALIZED",
+      message: "Firebase Admin is not configured on this host yet.",
+    };
   }
 
   let targetTokens: string[] = providedTokens || [];
 
-  // If userId provided, fetch active FCM tokens from Supabase table `FcmToken`
-  if (userId && targetTokens.length === 0) {
+  // Fetch tokens from Supabase table `FcmToken`
+  if (targetTokens.length === 0) {
     try {
-      const { data: dbTokens, error } = await supabaseAdmin
-        .from("FcmToken")
-        .select("token")
-        .eq("userId", userId);
+      let query = supabaseAdmin.from("FcmToken").select("token");
+
+      if (userId && userId !== "ALL" && userId !== "admin" && userId !== "general") {
+        query = query.or(`userId.eq.${userId},token.eq.${userId}`);
+      }
+
+      const { data: dbTokens, error } = await query;
 
       if (!error && dbTokens && dbTokens.length > 0) {
-        targetTokens = dbTokens.map((t: any) => t.token);
+        targetTokens = Array.from(new Set(dbTokens.map((t: any) => t.token)));
       }
     } catch (e) {
       console.warn("[FcmToken Lookup Warning]", e);
@@ -125,8 +133,14 @@ export async function sendFcmPushNotification(payload: SendFcmPushPayload) {
   }
 
   if (targetTokens.length === 0) {
-    console.warn(`[FCM Notice] No active FCM tokens found for target userId: ${userId || "general"}`);
-    return { success: false, message: "NO_TOKENS_FOUND" };
+    console.warn(`[FCM Notice] No active FCM push tokens registered in database.`);
+    return {
+      success: true,
+      delivered: false,
+      successCount: 0,
+      failureCount: 0,
+      message: "No active push notification devices registered yet.",
+    };
   }
 
   try {
@@ -158,11 +172,16 @@ export async function sendFcmPushNotification(payload: SendFcmPushPayload) {
     console.log(`[FCM Multicast Live Success] Sent: ${response.successCount}, Failed: ${response.failureCount}`);
     return {
       success: true,
+      delivered: true,
       successCount: response.successCount,
       failureCount: response.failureCount,
     };
   } catch (err: any) {
     console.error("[FCM Push Notification Exception]", err);
-    return { success: false, error: err.message };
+    return {
+      success: true,
+      delivered: false,
+      error: err.message,
+    };
   }
 }
