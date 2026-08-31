@@ -72,14 +72,18 @@ if (!getApps().length) {
   if (!initialized && projectId && clientEmail && rawKey) {
     try {
       const cleanKey = formatPrivateKeyString(rawKey);
-      initializeApp({
-        credential: cert({
-          projectId,
-          clientEmail,
-          privateKey: cleanKey,
-        }),
-      });
-      initialized = true;
+      if (cleanKey && cleanKey.includes("MII")) {
+        initializeApp({
+          credential: cert({
+            projectId,
+            clientEmail,
+            privateKey: cleanKey,
+          }),
+        });
+        initialized = true;
+      } else {
+        console.warn("[Firebase Admin Notice] FIREBASE_PRIVATE_KEY is a placeholder or invalid RSA key. Skipping initialization.");
+      }
     } catch (err) {
       console.warn("[Firebase Admin Credentials Error]", err);
     }
