@@ -182,14 +182,15 @@ export default function AdminNotificationsPage() {
     setPushFeedback(null);
 
     try {
-      // 1. Dispatch Web Push via FCM API
+      // 1. Dispatch Web Push via FCM API (Server also saves to database)
       const res = await fetch("/api/notifications/send-fcm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: pushTarget === "USER" ? targetUserId : "admin",
+          userId: pushTarget === "USER" ? targetUserId : "ALL",
           title: pushTitle,
           body: pushBody,
+          category: pushCategory,
           data: {
             actionUrl: pushActionUrl,
             category: pushCategory,
@@ -199,18 +200,17 @@ export default function AdminNotificationsPage() {
 
       const data = await res.json();
 
-      // 2. Insert notification log into database
-      await supabase.from("Notification").insert({
-        userId: pushTarget === "USER" ? targetUserId : null,
-        title: pushTitle,
-        body: pushBody,
-        type: pushCategory,
-      });
-
       if (data.success) {
+        let msg = "Notification saved to database log!";
+        if (data.delivered && data.successCount > 0) {
+          msg = `Delivered Web Push alert to ${data.successCount} active device(s)!`;
+        } else if (data.message) {
+          msg = `Saved to database! (${data.message})`;
+        }
+
         setPushFeedback({
           type: "success",
-          msg: `Notification sent successfully! ${data.successCount ? `Delivered to ${data.successCount} active tokens.` : ""}`,
+          msg,
         });
         setPushTitle("");
         setPushBody("");
