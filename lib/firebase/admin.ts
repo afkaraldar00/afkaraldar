@@ -3,6 +3,23 @@ import { getMessaging } from "firebase-admin/messaging";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import fs from "fs";
 
+function formatPrivateKeyString(keyStr: string): string {
+  if (!keyStr) return "";
+  let res = keyStr.trim();
+  if ((res.startsWith('"') && res.endsWith('"')) || (res.startsWith("'") && res.endsWith("'"))) {
+    res = res.slice(1, -1);
+  }
+  if (!res.includes("-----BEGIN PRIVATE KEY-----") && res.length > 50) {
+    try {
+      const decoded = Buffer.from(res, "base64").toString("utf8");
+      if (decoded.includes("-----BEGIN PRIVATE KEY-----")) {
+        res = decoded;
+      }
+    } catch (e) {}
+  }
+  return res.replace(/\\n/g, "\n").replace(/\r\n/g, "\n");
+}
+
 if (!getApps().length) {
   const projectId = process.env.FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
@@ -16,6 +33,9 @@ if (!getApps().length) {
   if (fs.existsSync(localJsonPath)) {
     try {
       const fileData = JSON.parse(fs.readFileSync(localJsonPath, "utf-8"));
+      if (fileData.private_key) {
+        fileData.private_key = formatPrivateKeyString(fileData.private_key);
+      }
       initializeApp({ credential: cert(fileData) });
       initialized = true;
     } catch (e) {
@@ -26,21 +46,32 @@ if (!getApps().length) {
   // Option 2: Service Account JSON string from environment
   if (!initialized && serviceAccountJson) {
     try {
-      const parsedAccount = typeof serviceAccountJson === "string" ? JSON.parse(serviceAccountJson) : serviceAccountJson;
+      let rawJson = serviceAccountJson.trim();
+      if ((rawJson.startsWith('"') && rawJson.endsWith('"')) || (rawJson.startsWith("'") && rawJson.endsWith("'"))) {
+        rawJson = rawJson.slice(1, -1);
+      }
+      if (!rawJson.startsWith("{") && rawJson.length > 50) {
+        try {
+          const decodedJson = Buffer.from(rawJson, "base64").toString("utf8");
+          if (decodedJson.startsWith("{")) rawJson = decodedJson;
+        } catch (e) {}
+      }
+
+      const parsedAccount = typeof rawJson === "string" ? JSON.parse(rawJson) : rawJson;
       if (parsedAccount.private_key) {
-        parsedAccount.private_key = parsedAccount.private_key.replace(/\\n/g, "\n");
+        parsedAccount.private_key = formatPrivateKeyString(parsedAccount.private_key);
       }
       initializeApp({ credential: cert(parsedAccount) });
       initialized = true;
     } catch (err) {
-      console.error("[Firebase Admin Service Account JSON Error]", err);
+      console.warn("[Firebase Admin Service Account JSON Error]", err);
     }
   }
 
   // Option 3: Individual environment variables
   if (!initialized && projectId && clientEmail && rawKey) {
     try {
-      const cleanKey = rawKey.trim().replace(/^["']|["']$/g, "").replace(/\\n/g, "\n");
+      const cleanKey = formatPrivateKeyString(rawKey);
       initializeApp({
         credential: cert({
           projectId,
@@ -50,7 +81,7 @@ if (!getApps().length) {
       });
       initialized = true;
     } catch (err) {
-      console.error("[Firebase Admin Credentials Error]", err);
+      console.warn("[Firebase Admin Credentials Error]", err);
     }
   }
 }
