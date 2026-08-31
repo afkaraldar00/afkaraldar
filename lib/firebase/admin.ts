@@ -1,35 +1,57 @@
 import { getApps, initializeApp, cert } from "firebase-admin/app";
 import { getMessaging } from "firebase-admin/messaging";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import fs from "fs";
 
 if (!getApps().length) {
   const projectId = process.env.FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY
-    ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n")
-    : undefined;
-
+  const rawKey = process.env.FIREBASE_PRIVATE_KEY;
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
 
-  try {
-    if (serviceAccountJson) {
-      const parsedAccount = JSON.parse(serviceAccountJson);
-      initializeApp({
-        credential: cert(parsedAccount),
-      });
-    } else if (projectId && clientEmail && privateKey) {
+  let initialized = false;
+
+  // Option 1: Try reading local JSON file if present on disk
+  const localJsonPath = "C:\\Users\\koky\\Downloads\\eftikad-kh-firebase-adminsdk-fbsvc-4e4a0d00ac.json";
+  if (fs.existsSync(localJsonPath)) {
+    try {
+      const fileData = JSON.parse(fs.readFileSync(localJsonPath, "utf-8"));
+      initializeApp({ credential: cert(fileData) });
+      initialized = true;
+    } catch (e) {
+      console.warn("[Firebase Admin Local JSON Read Warning]", e);
+    }
+  }
+
+  // Option 2: Service Account JSON string from environment
+  if (!initialized && serviceAccountJson) {
+    try {
+      const parsedAccount = typeof serviceAccountJson === "string" ? JSON.parse(serviceAccountJson) : serviceAccountJson;
+      if (parsedAccount.private_key) {
+        parsedAccount.private_key = parsedAccount.private_key.replace(/\\n/g, "\n");
+      }
+      initializeApp({ credential: cert(parsedAccount) });
+      initialized = true;
+    } catch (err) {
+      console.error("[Firebase Admin Service Account JSON Error]", err);
+    }
+  }
+
+  // Option 3: Individual environment variables
+  if (!initialized && projectId && clientEmail && rawKey) {
+    try {
+      const cleanKey = rawKey.trim().replace(/^["']|["']$/g, "").replace(/\\n/g, "\n");
       initializeApp({
         credential: cert({
           projectId,
           clientEmail,
-          privateKey,
+          privateKey: cleanKey,
         }),
       });
-    } else {
-      console.warn("[Firebase Admin Notice] Firebase Admin SDK is missing service account credentials in .env.local.");
+      initialized = true;
+    } catch (err) {
+      console.error("[Firebase Admin Credentials Error]", err);
     }
-  } catch (err) {
-    console.error("[Firebase Admin Initialization Error]", err);
   }
 }
 
