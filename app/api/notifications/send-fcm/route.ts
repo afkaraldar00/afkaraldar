@@ -18,9 +18,9 @@ export async function POST(req: Request) {
       data,
     });
 
-    return NextResponse.json(result);
+    return NextResponse.json(result, { status: result.success ? 200 : 400 });
   } catch (err: any) {
-    console.error("[FCM API Route Error]", err);
+    console.error("[FCM API Route Exception]", err);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
