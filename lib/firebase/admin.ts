@@ -160,8 +160,8 @@ export async function sendFcmPushNotification(payload: SendFcmPushPayload) {
         notification: {
           title,
           body,
-          icon: "/hero-bg.png",
-          badge: "/favicon.ico",
+          icon: "/icon.png",
+          badge: "/icon.png",
         },
         fcmOptions: {
           link: data.click_action || data.actionUrl || "https://afkaraldar.ae/notifications",

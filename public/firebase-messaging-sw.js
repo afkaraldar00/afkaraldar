@@ -19,13 +19,13 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   console.log('[firebase-messaging-sw.js] Received background message: ', payload);
 
-  const notificationTitle = payload.notification?.title || '🎁 New Curation Alert';
+  const notificationTitle = payload.notification?.title || '🎁 Afkar AlDar Alert';
   const notificationOptions = {
     body: payload.notification?.body || 'A new custom box request has arrived in Concierge Admin.',
-    icon: '/favicon.ico',
-    badge: '/favicon.ico',
+    icon: '/icon.png',
+    badge: '/icon.png',
     data: {
-      url: '/admin/notifications',
+      url: payload.data?.click_action || payload.data?.actionUrl || '/admin/notifications',
     },
   };
 
