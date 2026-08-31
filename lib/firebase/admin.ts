@@ -1,7 +1,8 @@
-import * as admin from "firebase-admin";
+import { getApps, initializeApp, cert } from "firebase-admin/app";
+import { getMessaging } from "firebase-admin/messaging";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
-if (!admin.apps.length) {
+if (!getApps().length) {
   const projectId = process.env.FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   const privateKey = process.env.FIREBASE_PRIVATE_KEY
@@ -13,12 +14,12 @@ if (!admin.apps.length) {
   try {
     if (serviceAccountJson) {
       const parsedAccount = JSON.parse(serviceAccountJson);
-      admin.initializeApp({
-        credential: admin.credential.cert(parsedAccount),
+      initializeApp({
+        credential: cert(parsedAccount),
       });
     } else if (projectId && clientEmail && privateKey) {
-      admin.initializeApp({
-        credential: admin.credential.cert({
+      initializeApp({
+        credential: cert({
           projectId,
           clientEmail,
           privateKey,
@@ -43,7 +44,7 @@ export interface SendFcmPushPayload {
 export async function sendFcmPushNotification(payload: SendFcmPushPayload) {
   const { userId, tokens: providedTokens, title, body, data = {} } = payload;
 
-  if (!admin.apps.length) {
+  if (!getApps().length) {
     console.warn("[FCM Warning] Firebase Admin SDK not initialized. Skipping push notification.");
     return { success: false, error: "FIREBASE_ADMIN_UNINITIALIZED" };
   }
@@ -72,7 +73,7 @@ export async function sendFcmPushNotification(payload: SendFcmPushPayload) {
   }
 
   try {
-    const messaging = admin.messaging();
+    const messaging = getMessaging();
 
     const response = await messaging.sendEachForMulticast({
       tokens: targetTokens,
