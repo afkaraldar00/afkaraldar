@@ -2,6 +2,19 @@ import { NextResponse } from "next/server";
 import { sendFcmPushNotification } from "@/lib/firebase/admin";
 import { supabaseAdmin as supabase } from "@/lib/supabase/admin";
 
+export async function GET() {
+  return NextResponse.json({
+    status: "online",
+    service: "FCM Push Notification Engine",
+    supportedMethods: ["POST"],
+    examplePayload: {
+      userId: "admin",
+      title: "🎁 Gift Box Alert",
+      body: "Your custom push notification message here",
+    },
+  });
+}
+
 export async function POST(req: Request) {
   try {
     let body: any = {};
