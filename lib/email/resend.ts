@@ -486,4 +486,54 @@ export async function sendAdminGeneralNotificationEmail(params: {
   });
 }
 
+export async function sendWelcomeConfirmationEmail(params: {
+  to: string;
+  name: string;
+  confirmationUrl?: string;
+}) {
+  const { to, name, confirmationUrl } = params;
+
+  const html = `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #AD7D39; border-radius: 16px; background: #FFFFFF; color: #191611;">
+      <div style="text-align: center; border-bottom: 2px solid #AD7D39; padding-bottom: 16px; margin-bottom: 24px;">
+        <h1 style="font-family: serif; color: #191611; font-size: 26px; margin: 0;">Afkar AlDar | أفكار الدار</h1>
+        <p style="color: #AD7D39; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; margin-top: 4px;">Luxury Bespoke Gifting Concierge • UAE</p>
+      </div>
+
+      <h2 style="font-family: serif; color: #191611; font-size: 20px;">Welcome to Afkar AlDar, ${name || "Valued Guest"}!</h2>
+
+      <p style="font-size: 14px; line-height: 1.6; color: #625D55;">
+        Thank you for creating an account with Afkar AlDar. Your registration is complete, and your concierge account is active!
+      </p>
+
+      <div style="background: #FBF8F3; padding: 20px; border-radius: 12px; border: 1px solid rgba(173,125,57,0.3); margin: 24px 0; text-align: center;">
+        <p style="font-size: 14px; font-weight: bold; color: #191611; margin-bottom: 12px;">Your Concierge Account Features:</p>
+        <ul style="text-align: left; font-size: 13px; color: #625D55; line-height: 1.8; margin-bottom: 20px; padding-left: 20px;">
+          <li>📦 Track live status of custom gift box requests</li>
+          <li>🎁 Save personalized occasion reminders in your VIP gifting calendar</li>
+          <li>💳 Instant checkout payment links & order history access</li>
+          <li>🔔 Live FCM Web Push notifications for delivery updates</li>
+        </ul>
+
+        ${confirmationUrl ? `
+          <a href="${confirmationUrl}" style="background: linear-gradient(135deg, #AD7D39 0%, #7D5121 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block; font-size: 14px;">Access Account Portal</a>
+        ` : `
+          <a href="https://www.afkaraldar.ae/auth" style="background: linear-gradient(135deg, #AD7D39 0%, #7D5121 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block; font-size: 14px;">Access Account Portal</a>
+        `}
+      </div>
+
+      <p style="font-size: 12px; color: #8A8378; border-top: 1px solid #E5E0D8; padding-top: 16px; margin-top: 30px; text-align: center;">
+        If you have any questions or need custom concierge gifting advice, contact us anytime at support@afkaraldar.ae or via WhatsApp.
+      </p>
+    </div>
+  `;
+
+  return sendEmail({
+    to,
+    subject: `✨ Welcome to Afkar AlDar — Account Registration Confirmed`,
+    html,
+  });
+}
+
+
 

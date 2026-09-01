@@ -33,7 +33,7 @@ export default function AuthPage() {
         
         router.push("/admin");
       } else if (activeTab === "signup") {
-        const { error } = await supabase.auth.signUp({
+        const { data: authData, error } = await supabase.auth.signUp({
           email: email.trim(),
           password: password,
           options: {
@@ -44,7 +44,18 @@ export default function AuthPage() {
         });
         if (error) throw error;
 
-        setSuccessMsg("Registration successful! Please check your email inbox to verify your account.");
+        // Dispatch Custom Welcome & Account Confirmation Email via API
+        fetch("/api/auth/send-confirmation", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: email.trim(),
+            name: fullName.trim(),
+            userId: authData.user?.id,
+          }),
+        }).catch(e => console.warn("Confirmation email dispatch warning:", e));
+
+        setSuccessMsg("Registration successful! A welcome & account confirmation email has been sent to your inbox.");
       } else {
         // Forgot Password Flow
         const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
