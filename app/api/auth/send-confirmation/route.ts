@@ -22,8 +22,8 @@ export async function POST(req: Request) {
     const customerId = userId || `cust_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
     // 1. Upsert Customer record into database via service role safely
+    let dbSaved = false;
     try {
-      // Check existing customer by email
       const { data: existingCustomer } = await supabase
         .from("Customer")
         .select("id")
@@ -32,12 +32,14 @@ export async function POST(req: Request) {
 
       const finalId = existingCustomer ? existingCustomer.id : customerId;
 
-      await supabase.from("Customer").upsert({
+      const { error: dbError } = await supabase.from("Customer").upsert({
         id: finalId,
         email: cleanEmail,
         name: cleanName,
         authUserId: userId || null,
       }, { onConflict: "email" });
+
+      if (!dbError) dbSaved = true;
     } catch (dbErr) {
       console.warn("[Auth Confirmation DB Customer Notice]", dbErr);
     }
@@ -57,7 +59,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: "Account registration confirmed and welcome email sent!",
+      dbSaved,
+      message: "Account registration processed and confirmation email dispatched!",
       emailResult,
     }, { status: 200 });
   } catch (err: any) {
