@@ -23,7 +23,7 @@ messaging.onBackgroundMessage((payload) => {
   const notificationOptions = {
     body: payload.notification?.body || 'A new custom box request has arrived in Concierge Admin.',
     icon: '/icon.png',
-    badge: '/icon.png',
+    badge: '/badge.png',
     data: {
       url: payload.data?.click_action || payload.data?.actionUrl || '/admin/notifications',
     },
